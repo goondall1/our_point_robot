@@ -7,56 +7,84 @@ from ompl import util as ou
 import math
 import array
 import numpy as np
+import sys
+from typing import List
+import getopt
+from CircleObsConfiguration import Configuration as Cfg
 
-width = 100
-height = 100
 
+class Circle:
+    def __init__(self, radius, x, y):
+        self.radius = radius
+        self.x = x 
+        self.y = y
+    
+    def isInCircle(self, x ,y):
+        return math.sqrt((x - self.x) ** 2 + (y - self.y) ** 2) <= self.radius
 
-# maxval = 255
-# ppm_header = f'P6 {width} {height} {maxval}\n'
-# #
-# # # PPM image data (filled with blue)
-# image = array.array('B', [0, 0, 0] * width * height)
+class PlotBackgroundWithObs:
+    def __init__(self, obs: List[Circle], file_name = 'background.ppm', background_size = (1024,1024)):
+        self.obs = obs 
+        self.background_size = background_size
+        self.file_name = file_name
+        
 
-# Fill with red the rectangle with origin at (10, 10) and width x height = 50 x 80 pixels
-# for y in range(10, 90):
-#     for x in range(10, 60):
-#         index = 3 * (y * width + x)
-#         image[index] = 0           # red channel
-#         image[index + 1] = 0         # green channel
-#         image[index + 2] = 0         # blue channel
-#
-# with open('white_red_example.ppm', 'wb') as f:
-#     f.write(bytearray(ppm_header, 'ascii'))
-#     image.tofile(f)
-# #
-# img = plt.imread("./white_red_example.ppm")
-# plt.imshow(img)
-# plt.axis('off')
-# plt.show()
+    def prepare(self):
+        # PPM header
+        (width, height) = self.background_size
+        maxval = 255
+        ppm_header = f'P6 {width} {height} {maxval}\n'
+        image = array.array('B', [0, 0, 0] * width * height)
+
+        for circle in self.obs:
+            for y in range(circle.y-circle.radius, circle.y+circle.radius):
+                for x in range(circle.x-circle.radius, circle.x+circle.radius):
+                    if(circle.isInCircle(x, y)):
+                        index = 3 * (y * width + x)
+                        if(index < 3*height*width):#draw only if index is in range of array
+                            for i in range(3):
+                                image[index+i] = 255
+
+        with open(self.file_name, 'wb') as f:
+            f.write(bytearray(ppm_header, 'ascii'))
+            image.tofile(f)
+
+    def plot(self):
+        img = plt.imread(self.file_name)
+        plt.imshow(img)
+        plt.axis('off')
+        plt.show()
+
 
 class PointRobotWithObsAndControl:
     # def __init__(self, ppm_file, obs):
-    def __init__(self, ppm_file):
+    def __init__(self, ppm_file,obs : list, start=(1,1), goal=(1000,1000)):
         self.ppm_ = ou.PPM()
         self.ppm_.loadFile(ppm_file)
+
         self.width = self.ppm_.getWidth()
         self.height = self.ppm_.getHeight()
+
         self.space = ob.RealVectorStateSpace()
         self.space.addDimension(0.0, self.width)
         self.space.addDimension(0.0, self.height)
+
         self.bounds = ob.RealVectorBounds(2)
-        # bounds.addDimension(0.0, width)
-        # bounds.addDimension(0.0, height)
         self.bounds.setLow(0)
         self.bounds.setHigh(1000)
+
         self.space.setBounds(self.bounds)
         self.cspace = oc.RealVectorControlSpace(self.space, 2)
         self.cbounds = ob.RealVectorBounds(2)
         self.cbounds.setLow(-1)
         self.cbounds.setHigh(1)
         self.cspace.setBounds(self.cbounds)
+
         self.setup = oc.SimpleSetup(self.cspace)
+        self.obs = obs
+        self.start = start
+        self.goal = goal
+        
 
     def recordSolution(self):
         solution = self.setup.getSolutionPath()
@@ -66,36 +94,27 @@ class PointRobotWithObsAndControl:
             w = min(self.width - 1, int(p.getState(i)[0]))
             h = min(self.height - 1, int(p.getState(i)[1]))
             c = self.ppm_.getPixel(h, w)
-            c.red = 255
-            c.green = 0
+            c.red = 255 
+            c.green = 0 
             c.blue = 0
 
-    def plan(self, start_row=0, start_col=0, goal_row=55, goal_col=55):
-        start = ob.State(self.space)
-        start[0] = start_row
-        start[1] = start_col
-        goal = ob.State(self.space)
-        goal[0] = goal_row
-        goal[1] = goal_col
+    def plan(self):
 
-        #
-        # print(start)
-        # print(goal)
-        #
+        start = ob.State(self.space)
+        (start[0], start[1]) = self.start
+
+        goal = ob.State(self.space)
+        (goal[0], goal[1]) = self.goal
+        
         def isStateValid(spaceInformation, state):
             # perform collision checking or check if other constraints are satisfied
-            radius = 50
-            center_x = 512
-            center_y = 512
+            state_x, state_y = state[0],state[1]
             return spaceInformation.satisfiesBounds(state) and \
-                   math.sqrt((state[0] - center_x) ** 2 + (state[1] - center_y) ** 2) > radius
+                    all([not circle.isInCircle(state_x, state_y) for circle in self.obs])
 
         def propagate(start, control, duration, state):
             for i in range(2):
-                # print("duration is: ",duration)
                 state[i] = start[i] + duration * control[i]
-            # for i, (s, c) in enumerate(zip(start, control)):
-            #     state[i] = s + duration * c
 
         self.setup.setStateValidityChecker(
             ob.StateValidityCheckerFn(partial(isStateValid, self.setup.getSpaceInformation())))
@@ -121,23 +140,39 @@ class PointRobotWithObsAndControl:
 
 if __name__ == "__main__":
 
-    env = PointRobotWithObsAndControl("./example.ppm")
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "c:",["configuration"])
+    except getopt.GetoptError:
+        print("illegal configuration, input can only be a number from 1 to 10\n try: 'this_file.py' -c 1")
+        sys.exit(2)
+    
+    cfg = 1
+    for opt, arg in opts:
+        if opt in ("-c", "--configuration"):
+            cfg = int(arg)
 
-    if env.plan(20, 20, 800, 800):
-        env.recordSolution()
-        env.save("result_demo.ppm")
-        solution = env.getSolution()
+    obs = [Circle(*obs) for obs in Cfg.getConfiguration(cfg)]
+    ppm_filename = './bg_w_2_circles.ppm'
+    preprocess = PlotBackgroundWithObs(obs,ppm_filename)
+    preprocess.prepare()
 
-        # controls = solution.getControls()
-        # control0 = controls[0]
-        # states = solution.getStates()
+    start_goals = np.random.randint(0,1024,size=(1000,4))
+    num_of_solutions = 0
+    num_of_failed_solutions = 0
+    for row in start_goals:
+        start = (int(row[0]),int(row[1]))        
+        goal = (int(row[2]),int(row[3]))
+        env = PointRobotWithObsAndControl(ppm_filename,obs,start,goal)
+        if env.plan():
+            env.recordSolution()
+            env.save(ppm_filename)
+            solution = env.getSolution()
+            num_of_solutions += 1
+            # print the path to screen
+            # print("Found solution:\n%s" % solution.printAsMatrix())
+        else:
+            num_of_failed_solutions +=1
+    print("Found {} valid solutions".format(num_of_solutions))
+    print("Faild in {} solutions".format(num_of_failed_solutions))
+    preprocess.plot()
 
-        # print the path to screen
-        print("Found solution:\n%s" % solution.printAsMatrix())
-        # a = np.array(solution.printAsMatrix())
-        # print(a)
-        env.save("./result_demo.ppm")
-        img = plt.imread("./result_demo.ppm")
-        plt.imshow(img)
-        plt.axis('off')
-        plt.show()
