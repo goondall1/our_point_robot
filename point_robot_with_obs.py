@@ -10,7 +10,7 @@ import numpy as np
 import sys
 from typing import List
 import getopt
-from CircleObsConfiguration import Configuration as Cfg
+from CircleObsConfiguration import CircleObsConfiguration as ObsCfg
 
 
 class Circle:
@@ -139,6 +139,9 @@ class PointRobotWithObsAndControl:
 
 
 if __name__ == "__main__":
+    height = 1024
+    width = 1024
+    num_of_start_goal_pairs = 2
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], "c:",["configuration"])
@@ -150,19 +153,23 @@ if __name__ == "__main__":
     for opt, arg in opts:
         if opt in ("-c", "--configuration"):
             cfg = int(arg)
+    ppm_filename = './point_robot_with_obs.ppm'
 
-    obs = [Circle(*obs) for obs in Cfg.getConfiguration(cfg)]
-    ppm_filename = './bg_w_2_circles.ppm'
-    preprocess = PlotBackgroundWithObs(obs,ppm_filename)
+    obs_cfg = ObsCfg(width=width,height=height)
+    obs = [Circle(*obs) for obs in obs_cfg.getConfiguration(cfg)] 
+
+    preprocess = PlotBackgroundWithObs(obs,ppm_filename,background_size=(width,height))
     preprocess.prepare()
 
-    start_goals = np.random.randint(0,1024,size=(1000,4))
+    start_goals = np.random.randint(0,height,size=(num_of_start_goal_pairs,4))
+
     num_of_solutions = 0
     num_of_failed_solutions = 0
+
     for row in start_goals:
         start = (int(row[0]),int(row[1]))        
         goal = (int(row[2]),int(row[3]))
-        env = PointRobotWithObsAndControl(ppm_filename,obs,start,goal)
+        env = PointRobotWithObsAndControl(ppm_filename, obs, start, goal)
         if env.plan():
             env.recordSolution()
             env.save(ppm_filename)
