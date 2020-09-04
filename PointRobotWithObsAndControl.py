@@ -97,4 +97,7 @@ class PointRobotWithObsAndControl:
 
     def getSolution(self):
         return self.setup.getSolutionPath()
+    
+    def getLastPathTime(self):
+        return self.setup.getLastPlanComputationTime()
 
