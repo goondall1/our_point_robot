@@ -45,7 +45,7 @@ class PointRobotWithObsAndControl:
         self.goal = goal
         
 
-    def recordSolution(self):
+    def recordSolution(self, isFail=False):
         solution = self.setup.getSolutionPath()
         p = solution
         p.interpolate()
@@ -53,8 +53,8 @@ class PointRobotWithObsAndControl:
             w = min(self.width - 1, int(p.getState(i)[0]))
             h = min(self.height - 1, int(p.getState(i)[1]))
             c = self.ppm_.getPixel(h, w)
-            c.red = 255 
-            c.green = 0 
+            c.red = 255 if isFail else 0
+            c.green = 0 if isFail else 255
             c.blue = 0
 
     def plan(self):

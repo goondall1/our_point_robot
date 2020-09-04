@@ -1,12 +1,12 @@
 height = 1024
 width = 1024
-num_of_start_goal_pairs = 100
+num_of_start_goal_pairs = 10
 radius_min = 40
 radius_max = 60
-distance_to_goal_tolerance = 0.05
+distance_to_goal_tolerance = 0.5
 solution_time = 1.0
 propagation_step_size = 0.5
-num_of_obs = 20
+num_of_obs = 0
 
 
 def conf_str():
