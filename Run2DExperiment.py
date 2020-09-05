@@ -41,8 +41,8 @@ if __name__ == "__main__":
     num_of_failed_solutions = 0
     total_time = 0.0
     failed_sol_reasons = []
-    save_success_rates_to_file = True
-    plot_rates = False
+    save_success_rates_to_file = False
+    plot_rates = True
     
     for row in start_goals:
         start = (int(row[0]),int(row[1]))        
@@ -96,8 +96,9 @@ if __name__ == "__main__":
         time_limits = np.load('time_limits.npy',allow_pickle=True).tolist() if os.path.isfile('time_limits.npy') else []
         print(success_rates)
         print(time_limits)
-        plt.plot(time_limits, success_rates)
-        plt.ylabel('Sucess Rates Over Time')
+        plt.plot(time_limits,[rate*100 for rate in success_rates])
+        plt.title('Average Sucess Rates Over Time')
+        plt.xlabel("Solution Time Limit [Sec]")
         plt.show()
         
     preprocess.plot()
